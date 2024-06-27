@@ -53,7 +53,7 @@ func NewSubject(s service.UserService, c *config.ClashWsConfig) http.HandlerFunc
 		}
 		out, _ := yaml.Marshal(subject)
 		w.Header().Set("Content-Disposition", "attachment; filename=subject.yaml")
-		w.Header().Set("subscription-userinfo", fmt.Sprintf("upload=%d; download=%d; total=1024000; expire=%d", u.Upload, u.Download, u.Expire.Unix()))
+		w.Header().Set("subscription-userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", u.Upload, u.Download, u.Total, u.Expire.Unix()))
 		w.Header().Set("profile-web-page-url", "https://chuangjie.icu")
 		_, _ = w.Write(out)
 	}

@@ -1,4 +1,4 @@
-package hub
+package handle
 
 import (
 	"github.com/sirupsen/logrus"

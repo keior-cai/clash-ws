@@ -1,17 +1,12 @@
 proxies:
   - name: 新加坡V
     type: ws
-    server: ws://chuangjie.icu
-    method: aes-256-cfb
-    username: test
-    passwd-len: 10
-  - name: 香港
-    type: ws
-    server: ws://47.91.223.177:9000
+    server: ws://127.0.0.1:8081
     method: aes-256-cfb
     username: test
     passwd-len: 10
 rules:
+  - DOMAIN-SUFFIX,baidu.com,DIRECT
   - DOMAIN,suow.zcshub.cn,DIRECT
   - DOMAIN-SUFFIX,seacang.com,DIRECT
   - DOMAIN-SUFFIX,services.googleapis.cn,{name}

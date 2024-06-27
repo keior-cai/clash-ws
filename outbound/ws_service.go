@@ -95,7 +95,7 @@ func (s *WsClient) Read(p []byte) (int, error) {
 		i := copy(p, s.buff)
 		s.buff = s.buff[i:]
 		for _, d := range s.handles {
-			d.Read(s.Id, p)
+			d.Read(s.Password, p)
 		}
 		return i, nil
 	}
@@ -110,7 +110,7 @@ func (s *WsClient) Read(p []byte) (int, error) {
 			s.buff = decrypt[i:]
 		}
 		for _, d := range s.handles {
-			d.Read(s.Id, p)
+			d.Read(s.Password, p)
 		}
 		return i, err
 	} else if messageType == websocket.CloseMessage {
@@ -129,14 +129,14 @@ func (s *WsClient) Write(p []byte) (int, error) {
 		return 0, err
 	}
 	for _, d := range s.handles {
-		d.Write(s.Id, encrypt)
+		d.Write(s.Password, encrypt)
 	}
 	return len(p), err
 }
 
 func (s *WsClient) Close() error {
 	for _, d := range s.handles {
-		d.CallbackClose(s.Id)
+		d.CallbackClose(s.Password)
 	}
 	return s.conn.Close()
 }
@@ -151,6 +151,7 @@ func (s *WsClient) Create() net.Conn {
 	info := &SendConnectInfo{}
 	_ = json.Unmarshal([]byte(ss), info)
 	s.UserName = info.Username
+	s.Password = info.Password
 	decryptStr := utils.AesInstant.DecryptStr(info.Random)
 	str, _ := utils.RsaInstant.RsaDecryptStr(decryptStr)
 	s.cipher = cipher.NewCipher(info.Method, str)
@@ -170,7 +171,6 @@ func (s *WsClient) Create() net.Conn {
 	if err != nil {
 		return nil
 	}
-	logrus.Infof("%s HOST = %s", s.UserName, host)
 	for _, h := range s.handles {
 		h.CallbackCreate(s.Id, info.Username, info.Password, host, s, conn)
 	}

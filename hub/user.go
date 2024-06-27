@@ -14,6 +14,14 @@ type UserHub struct {
 	c config.HttpServer
 }
 
+type AddExpireTime struct {
+	Day int `json:"day"`
+}
+
+type AddTraffic struct {
+	Size int `json:"size"`
+}
+
 func NewUserHub(c config.HttpServer, s service.UserService) UserHub {
 	return UserHub{
 		s: s,
@@ -72,6 +80,21 @@ func (uh UserHub) Route(route chi.Router) {
 			panic("用户不存在")
 		}
 		_ = json.NewEncoder(w).Encode(userInfo)
+	})
+	route.Post("/{name}/expire", func(w http.ResponseWriter, r *http.Request) {
+		name := chi.URLParam(r, "name")
+		time := &AddExpireTime{}
+		_ = json.NewDecoder(r.Body).Decode(time)
+		uh.s.AddExpireTime(name, time.Day)
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	route.Post("/{name}/traffic", func(w http.ResponseWriter, r *http.Request) {
+		name := chi.URLParam(r, "name")
+		traffic := &AddTraffic{}
+		_ = json.NewDecoder(r.Body).Decode(traffic)
+		uh.s.AddTotalTraffic(name, traffic.Size)
+		_, _ = w.Write([]byte("ok"))
 	})
 
 	route.Get("/", func(w http.ResponseWriter, rt *http.Request) {

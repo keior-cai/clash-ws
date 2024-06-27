@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"ws-server/config"
 	"ws-server/hub"
+	"ws-server/hub/handle"
 	service2 "ws-server/service"
 )
 
@@ -47,7 +48,8 @@ func main() {
 	})
 	userService := service2.NewRedisService(redisClient)
 	service := hub.NewWsService(ac.Http.Port)
-	service.Add(hub.NewCheck(userService))
+	trafficHandle := handle.NewTrafficHandle(userService)
+	service.Add(handle.NewCheck(userService), trafficHandle)
 	service.AddRoute(func(r *chi.Mux) {
 		r.Get("/subject", hub.NewSubject(userService, ac))
 		r.Route("/user", hub.NewUserHub(ac.Http, userService).Route)
@@ -62,6 +64,7 @@ func main() {
 		select {
 		case <-termSign:
 			_ = ac.Close()
+			_ = trafficHandle.Close()
 			return
 		}
 	}
