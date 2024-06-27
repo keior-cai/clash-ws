@@ -1,105 +1,108 @@
 package config
 
 import (
-	"bufio"
 	"bytes"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 	"os"
-	"strings"
 	"time"
 )
 
-var (
-	Proxies  []map[string]any
-	Rules    []string
-	TokenMap = make(map[string]string)
-	NameMap  = make(map[string]string)
-	ticker   = time.NewTicker(3 * time.Second)
-	path     string
-)
+type ClashWsConfig struct {
+	Port    int
+	Proxies []map[string]any
+	Rules   []string
+	Redis   RedisConfig
+	ticker  *time.Ticker
+}
+
+func (c ClashWsConfig) Close() error {
+	c.ticker.Stop()
+	return nil
+}
+
+type ApplicationConfig struct {
+	// 服务启动端口号
+	Port  int         `yaml:"port,omitempty"`
+	Redis RedisConfig `yaml:"redis"`
+	Path  string      `yaml:"path,omitempty"`
+}
+
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Username string `yaml:"username,omitempty"`
+	Password string `yaml:"password,omitempty"`
+	Db       int    `yaml:"db,omitempty"`
+}
 
 type RowConfig struct {
 	Proxies []map[string]any
 	Rules   []string
 }
 
-func init() {
-	go func() {
-		for range ticker.C {
-			if path == "" {
-				continue
-			}
-			err := parseConfig(path)
-			if err != nil {
-				logrus.Errorf("parse config error %s", err)
-			}
-		}
-	}()
-}
-
-func ParseConfig(p string) error {
-	path = p
-	return parseConfig(p)
-}
-
-func parseConfig(p string) error {
-	err := parseProxies(p + "/application.yaml")
+func parseConfig(p string) (*RowConfig, error) {
+	conf, err := parseProxies(p + "row.yaml")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = parseTokenMap(p + "/token")
-	if err != nil {
-		return err
-	}
-	return nil
+	return conf, nil
 }
 
-func parseProxies(path string) error {
+func parseProxies(path string) (*RowConfig, error) {
 	file, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(file))
 	config := &RowConfig{}
 	err = decoder.Decode(config)
 	if err != nil {
-		return err
+		logrus.Error(err)
+		return nil, err
 	}
-	Proxies = config.Proxies
-	Rules = config.Rules
-	return nil
+	return config, nil
 }
 
-func parseTokenMap(path string) error {
-	file, err := os.ReadFile(path)
+func NewConfig(file string) (*ClashWsConfig, error) {
+	f, err := os.ReadFile(file)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	reader := bytes.NewReader(file)
+	decoder := yaml.NewDecoder(bytes.NewReader(f))
+	config := &ApplicationConfig{}
+	err = decoder.Decode(config)
+	if err != nil {
+		return nil, err
+	}
+	if config.Path == "" {
+		config.Path = "./"
+	}
+	if config.Port == 0 {
+		config.Port = 8081
+	}
 
-	newReader := bufio.NewReader(reader)
-	m1 := make(map[string]string)
-	m2 := make(map[string]string)
-	for {
-		line, _, err := newReader.ReadLine()
-		if err != nil {
-			break
-		}
-		before, after, found := strings.Cut(string(line), "=")
-		if !found {
+	wsConfig := &ClashWsConfig{
+		Port:   config.Port,
+		Redis:  config.Redis,
+		ticker: time.NewTicker(3 * time.Second),
+	}
+	go func(path string, wsConfig *ClashWsConfig) {
+		Start(path, wsConfig)
+	}(config.Path, wsConfig)
+	return wsConfig, nil
+
+}
+
+func Start(path string, config *ClashWsConfig) {
+	for range config.ticker.C {
+		if path == "" {
 			continue
 		}
-		before = strings.Trim(before, " ")
-		after = strings.Trim(after, " ")
-		m1[before] = after
-		m2[after] = before
+		c, err := parseConfig(path)
+		if err != nil {
+			logrus.Errorf("parse config error %s", err)
+		}
+		config.Rules = c.Rules
+		config.Proxies = c.Proxies
 	}
-	TokenMap = m1
-	NameMap = m2
-	return nil
-}
-
-func Stop() {
-	ticker.Stop()
 }

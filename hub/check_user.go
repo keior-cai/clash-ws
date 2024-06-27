@@ -1,32 +1,29 @@
 package hub
 
 import (
-	"context"
-	"github.com/go-redis/redis/v8"
+	"github.com/sirupsen/logrus"
 	"net"
 	"time"
 	"ws-server/outbound"
+	"ws-server/service"
 )
-
-var redisUserZsetKey = "clash:ws:user"
 
 type CheckUserHandle struct {
 	outbound.AdaptorClientHandle
 
-	client *redis.Client
+	userService service.UserService
 }
 
-func (c CheckUserHandle) CallbackCreate(_, username, _ string, _ *outbound.WsClient, _ net.Conn) {
-	ctx := context.TODO()
-	score := c.client.ZScore(ctx, redisUserZsetKey, username)
-	second := time.Now().Second()
-	if score.Val() < float64(second) {
+func (c CheckUserHandle) CallbackCreate(_, _, password, _ string, _ *outbound.WsClient, _ net.Conn) {
+	userInfo := c.userService.GetByToken(password)
+	if userInfo == nil || userInfo.Expire.Before(time.Now()) {
+		logrus.Errorf("账号已经过期 %s", userInfo.Expire.Format(time.DateOnly))
 		panic("账号过期失效")
 	}
 }
 
-func NewCheck(client *redis.Client) CheckUserHandle {
+func NewCheck(s service.UserService) CheckUserHandle {
 	return CheckUserHandle{
-		client: client,
+		userService: s,
 	}
 }

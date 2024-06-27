@@ -3,26 +3,33 @@ package hub
 import (
 	"fmt"
 	"github.com/go-chi/chi"
-	"github.com/go-redis/redis/v8"
 	"net/http"
+	"ws-server/outbound"
 )
 
 type WsServer struct {
-	port int16
-
-	redis *redis.Client
+	Port int
+	hs   []outbound.ClientHandle
+	r    *chi.Mux
 }
 
-func NewWsService(c *redis.Client, port int16) WsServer {
-	return WsServer{
-		redis: c,
-		port:  port,
+func NewWsService(port int) *WsServer {
+	r := chi.NewRouter()
+	return &WsServer{
+		Port: port,
+		r:    r,
 	}
 }
 
 func (s WsServer) Start() error {
-	r := chi.NewRouter()
-	r.Get("/", NewService(NewCheck(s.redis)))
-	r.Get("/subject", NewSubject())
-	return http.ListenAndServe(fmt.Sprintf(":%d", s.port), r)
+	s.r.Get("/", NewService(s.hs))
+	return http.ListenAndServe(fmt.Sprintf(":%d", s.Port), s.r)
+}
+
+func (s *WsServer) Add(h ...outbound.ClientHandle) {
+	s.hs = append(s.hs, h...)
+}
+
+func (s *WsServer) AddRoute(f func(route *chi.Mux)) {
+	f(s.r)
 }

@@ -15,7 +15,7 @@ var upgrader = websocket.Upgrader{
 	HandshakeTimeout: time.Second * 10,
 }
 
-func NewService(h ...outbound.ClientHandle) http.HandlerFunc {
+func NewService(h []outbound.ClientHandle) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		upgrade, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {

@@ -10,7 +10,6 @@ import (
 	"net"
 	"time"
 	"ws-server/cipher"
-	"ws-server/config"
 	"ws-server/utils"
 )
 
@@ -27,7 +26,7 @@ type ClientHandle interface {
 
 	CallbackClose(id string)
 
-	CallbackCreate(id, userName, host string, c *WsClient, d net.Conn)
+	CallbackCreate(id, userName, password, host string, c *WsClient, d net.Conn)
 
 	CallbackRegister(id string, c *WsClient)
 }
@@ -47,7 +46,7 @@ func (a AdaptorClientHandle) CallbackClose(_ string) {
 
 }
 
-func (a AdaptorClientHandle) CallbackCreate(_, _, _ string, _ *WsClient, _ net.Conn) {
+func (a AdaptorClientHandle) CallbackCreate(id, userName, password, host string, c *WsClient, d net.Conn) {
 
 }
 
@@ -151,10 +150,6 @@ func (s *WsClient) Create() net.Conn {
 	ss := utils.AesInstant.DecryptStr(string(p))
 	info := &SendConnectInfo{}
 	_ = json.Unmarshal([]byte(ss), info)
-	if config.NameMap[info.Username] == "" {
-		// 鉴权失败
-		return nil
-	}
 	s.UserName = info.Username
 	decryptStr := utils.AesInstant.DecryptStr(info.Random)
 	str, _ := utils.RsaInstant.RsaDecryptStr(decryptStr)
@@ -177,7 +172,7 @@ func (s *WsClient) Create() net.Conn {
 	}
 	logrus.Infof("%s HOST = %s", s.UserName, host)
 	for _, h := range s.handles {
-		h.CallbackCreate(s.Id, info.Username, host, s, conn)
+		h.CallbackCreate(s.Id, info.Username, info.Password, host, s, conn)
 	}
 	s.writeMessage(&command{Command: CONNECT_SUCCESS})
 	return conn
