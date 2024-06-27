@@ -1,15 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"github.com/go-chi/chi"
 	"github.com/go-redis/redis/v8"
 	"github.com/sirupsen/logrus"
-	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"ws-server/config"
 	"ws-server/hub"
@@ -49,50 +46,11 @@ func main() {
 		Password: ac.Redis.Password,
 	})
 	userService := service2.NewRedisService(redisClient)
-	service := hub.NewWsService(ac.Port)
+	service := hub.NewWsService(ac.Http.Port)
 	service.Add(hub.NewCheck(userService))
 	service.AddRoute(func(r *chi.Mux) {
 		r.Get("/subject", hub.NewSubject(userService, ac))
-		r.Route("/user", func(route chi.Router) {
-			route.Use(func(handler http.Handler) http.Handler {
-				return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-					handler.ServeHTTP(writer, request)
-					writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-				})
-			}, func(handler http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					defer func() {
-						if er := recover(); er != nil {
-							w.Header().Set("Content-Type", "text/html; charset=utf-8")
-							s, _ := er.(string)
-							w.WriteHeader(http.StatusBadRequest)
-							_, _ = w.Write([]byte(s))
-						}
-					}()
-					handler.ServeHTTP(w, r)
-				})
-			})
-			route.Put("/{name}/{mouth}", func(w http.ResponseWriter, rt *http.Request) {
-				name := chi.URLParam(rt, "name")
-				month := chi.URLParam(rt, "mouth")
-				u := userService.GetByName(name)
-				if u != nil {
-					panic("用户已存在")
-				}
-				atoi, _ := strconv.Atoi(month)
-				user := userService.AddUser(name, atoi)
-				_ = json.NewEncoder(w).Encode(user)
-			})
-
-			route.Get("/{name}", func(w http.ResponseWriter, rt *http.Request) {
-				name := chi.URLParam(rt, "name")
-				userInfo := userService.GetByName(name)
-				if userInfo == nil {
-					panic("用户不存在")
-				}
-				_ = json.NewEncoder(w).Encode(userInfo)
-			})
-		})
+		r.Route("/user", hub.NewUserHub(ac.Http, userService).Route)
 	})
 	go func() {
 		logrus.Infof("start server :%d", service.Port)

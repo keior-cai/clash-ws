@@ -23,6 +23,11 @@ func NewSubject(s service.UserService, c *config.ClashWsConfig) http.HandlerFunc
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if s.Expire(token) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("账号已到期"))
+			return
+		}
 		u := s.GetByToken(token)
 		groupName := "新加坡🇸🇬"
 		group := ProxyGroup{

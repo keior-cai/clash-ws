@@ -1,4 +1,4 @@
 redis:
   addr: 127.0.0.1:4370
   db: 0
-path: /Users/simplify/code/ws-server/deploy/config/
+path: ./deploy/config/

@@ -3,7 +3,6 @@ package hub
 import (
 	"github.com/sirupsen/logrus"
 	"net"
-	"time"
 	"ws-server/outbound"
 	"ws-server/service"
 )
@@ -15,9 +14,8 @@ type CheckUserHandle struct {
 }
 
 func (c CheckUserHandle) CallbackCreate(_, _, password, _ string, _ *outbound.WsClient, _ net.Conn) {
-	userInfo := c.userService.GetByToken(password)
-	if userInfo == nil || userInfo.Expire.Before(time.Now()) {
-		logrus.Errorf("账号已经过期 %s", userInfo.Expire.Format(time.DateOnly))
+	if c.userService.Expire(password) {
+		logrus.Errorf("账号已经过期")
 		panic("账号过期失效")
 	}
 }

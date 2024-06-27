@@ -9,11 +9,11 @@ import (
 )
 
 type ClashWsConfig struct {
-	Port    int
 	Proxies []map[string]any
 	Rules   []string
 	Redis   RedisConfig
 	ticker  *time.Ticker
+	Http    HttpServer
 }
 
 func (c ClashWsConfig) Close() error {
@@ -21,11 +21,16 @@ func (c ClashWsConfig) Close() error {
 	return nil
 }
 
+type HttpServer struct {
+	Port   int    `yaml:"port,omitempty"`
+	Secret string `yaml:"secret,omitempty"`
+}
+
 type ApplicationConfig struct {
 	// 服务启动端口号
-	Port  int         `yaml:"port,omitempty"`
-	Redis RedisConfig `yaml:"redis"`
-	Path  string      `yaml:"path,omitempty"`
+	Server HttpServer  `yaml:"http"`
+	Redis  RedisConfig `yaml:"redis"`
+	Path   string      `yaml:"path,omitempty"`
 }
 
 type RedisConfig struct {
@@ -77,12 +82,9 @@ func NewConfig(file string) (*ClashWsConfig, error) {
 	if config.Path == "" {
 		config.Path = "./"
 	}
-	if config.Port == 0 {
-		config.Port = 8081
-	}
-
+	setDefaultHttp(&config.Server)
 	wsConfig := &ClashWsConfig{
-		Port:   config.Port,
+		Http:   config.Server,
 		Redis:  config.Redis,
 		ticker: time.NewTicker(3 * time.Second),
 	}
@@ -91,6 +93,12 @@ func NewConfig(file string) (*ClashWsConfig, error) {
 	}(config.Path, wsConfig)
 	return wsConfig, nil
 
+}
+
+func setDefaultHttp(server *HttpServer) {
+	if server.Port == 0 {
+		server.Port = 8081
+	}
 }
 
 func Start(path string, config *ClashWsConfig) {

@@ -27,9 +27,12 @@ type UserInfo struct {
 type UserService interface {
 	GetByToken(token string) *UserInfo
 	GetByName(name string) *UserInfo
-	AddUser(name string, month int) UserInfo
+	List() []string
+	Delete(name string)
+	AddUser(name string, day int) UserInfo
 	UploadSize(size int64, token string)
 	Download(size int64, token string)
+	Expire(token string) bool
 }
 
 type RedisUser struct {
@@ -83,13 +86,17 @@ func (r RedisUser) Download(size int64, token string) {
 	r.r.HIncrBy(r.c, formatKey(__info__, token), "download", size)
 }
 
-func (r RedisUser) AddUser(name string, month int) UserInfo {
+func (r RedisUser) AddUser(name string, day int) UserInfo {
 	u, _ := uuid.NewUUID()
 	info := UserInfo{
 		Name:     name,
 		Password: u.String(),
 		Token:    u.String(),
-		Expire:   time.Now().AddDate(0, month, 0),
+		Expire:   time.Now().AddDate(0, 0, day),
+	}
+
+	if day < 0 {
+		info.Expire = time.Unix(0, 0)
 	}
 	set := r.r.HSet(r.c, formatKey(__info__, u.String()),
 		"name", info.Name,
@@ -104,6 +111,45 @@ func (r RedisUser) AddUser(name string, month int) UserInfo {
 	}
 	r.r.HSet(r.c, __name__, name, info.Token)
 	return info
+}
+
+func (r RedisUser) Expire(token string) bool {
+	value := r.r.HGet(r.c, formatKey(__info__, token), "expire")
+	if value.Err() != nil || value.Val() == "" {
+		return true
+	}
+	t, err := time.Parse(time.DateOnly, value.Val())
+	if err != nil {
+		return true
+	}
+	if t.Unix() != 0 && t.Before(time.Now()) {
+		return true
+	}
+	return false
+}
+
+func (r RedisUser) Delete(name string) {
+	userInfo := r.GetByName(name)
+	if userInfo == nil {
+		panic("用户不存在")
+	}
+	del := r.r.Del(r.c, formatKey(__info__, userInfo.Token))
+	if del.Err() != nil || del.Val() <= 0 {
+		panic("删除失败")
+	}
+	r.r.HDel(r.c, __name__, userInfo.Name)
+}
+
+func (r RedisUser) List() []string {
+	all := r.r.HGetAll(r.c, __name__)
+	if all.Err() != nil {
+		return nil
+	}
+	var list []string
+	for k, _ := range all.Val() {
+		list = append(list, k)
+	}
+	return list
 }
 
 func formatKey(s ...string) string {
