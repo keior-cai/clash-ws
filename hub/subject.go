@@ -46,6 +46,7 @@ func NewSubject(s service.UserService, c *config.ClashWsConfig) http.HandlerFunc
 		for _, s := range c.Rules {
 			listRules = append(listRules, strings.Replace(s, "{name}", groupName, -1))
 		}
+		traffic := s.Traffic(token)
 		subject := &subject2.Subject{
 			Proxies:     c.Proxies,
 			ProxyGroups: []any{group},
@@ -53,7 +54,7 @@ func NewSubject(s service.UserService, c *config.ClashWsConfig) http.HandlerFunc
 		}
 		out, _ := yaml.Marshal(subject)
 		w.Header().Set("Content-Disposition", "attachment; filename=subject.yaml")
-		w.Header().Set("subscription-userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", u.Upload, u.Download, u.Total, u.Expire.Unix()))
+		w.Header().Set("subscription-userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", traffic.Upload, traffic.Download, u.Total, u.Expire.Unix()))
 		w.Header().Set("profile-web-page-url", "https://chuangjie.icu")
 		_, _ = w.Write(out)
 	}

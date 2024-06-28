@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
+	"github.com/bluele/gcache"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +16,8 @@ const (
 	__name__ = "clash:redis:name:token"
 	// 用户信息存储对象， 使用hash
 	__info__ = "clash:redis:user:info"
+
+	__traffic__ = "clash:redis:user:traffic"
 )
 
 const (
@@ -30,9 +35,12 @@ type UserInfo struct {
 	Password string    `json:"password"`
 	Token    string    `json:"token"`
 	Expire   time.Time `json:"expire"`
-	Upload   int64     `json:"upload"`
-	Download int64     `json:"download"`
 	Total    uint64    `json:"total"`
+}
+
+type Traffic struct {
+	Download int64 `json:"download"`
+	Upload   int64 `json:"upload"`
 }
 
 type UserService interface {
@@ -45,24 +53,38 @@ type UserService interface {
 	AddUser(name string, day int) UserInfo
 	UploadSize(size int64, token string)
 	Download(size int64, token string)
+	Traffic(token string) Traffic
 	Expire(token string) bool
 }
 
 type RedisUser struct {
-	r *redis.Client
-	c context.Context
+	r     *redis.Client
+	c     context.Context
+	cache gcache.Cache
 }
 
 func NewRedisService(r *redis.Client) UserService {
+	c := context.TODO()
 	return &RedisUser{
 		r: r,
-		c: context.TODO(),
+		c: c,
+		cache: gcache.New(500).LFU().LoaderFunc(func(i interface{}) (interface{}, error) {
+			logrus.Debugf("user cache %s", i)
+			all := r.HGetAll(c, formatKey(__info__, i.(string))).Val()
+			if len(all) == 0 {
+				return nil, errors.New("加载数据失败")
+			}
+			return parseUserInfo(all), nil
+		}).Expiration(time.Hour).Build(),
 	}
 }
 
 func (r RedisUser) GetByToken(token string) *UserInfo {
-	all := r.r.HGetAll(r.c, formatKey(__info__, token)).Val()
-	return parseUserInfo(all)
+	userInfo, err := r.cache.Get(token)
+	if err != nil {
+		return nil
+	}
+	return userInfo.(*UserInfo)
 }
 
 func (r RedisUser) GetByName(name string) *UserInfo {
@@ -70,21 +92,13 @@ func (r RedisUser) GetByName(name string) *UserInfo {
 	if token.Err() != nil {
 		return nil
 	}
-	all := r.r.HGetAll(r.c, formatKey(__info__, token.Val())).Val()
-	if len(all) == 0 {
-		return nil
-	}
-	return parseUserInfo(all)
+	return r.GetByToken(token.Val())
 }
 
 func parseUserInfo(m map[string]string) *UserInfo {
-	upload, _ := strconv.ParseInt(m["upload"], 10, 64)
-	download, _ := strconv.ParseInt(m["download"], 10, 64)
 	total, _ := strconv.ParseUint(m["total"], 10, 64)
 	expireTime, _ := time.Parse(time.DateOnly, m["expire"])
 	return &UserInfo{
-		Upload:   upload,
-		Download: download,
 		Name:     m["name"],
 		Password: m["password"],
 		Token:    m["token"],
@@ -94,11 +108,21 @@ func parseUserInfo(m map[string]string) *UserInfo {
 }
 
 func (r RedisUser) UploadSize(size int64, token string) {
-	r.r.HIncrBy(r.c, formatKey(__info__, token), "upload", size)
+	month := time.Now().Month()
+	key := formatKey(__traffic__, token, strconv.FormatInt(int64(month), 10))
+	in := r.r.HIncrBy(r.c, key, "upload", size)
+	if in.Err() != nil && in.Val() == size {
+		r.r.Expire(r.c, key, time.Hour*24*32)
+	}
 }
 
 func (r RedisUser) Download(size int64, token string) {
-	r.r.HIncrBy(r.c, formatKey(__info__, token), "download", size)
+	month := time.Now().Month()
+	key := formatKey(__traffic__, token, strconv.FormatInt(int64(month), 10))
+	in := r.r.HIncrBy(r.c, key, "download", size)
+	if in.Err() != nil && in.Val() == size {
+		r.r.Expire(r.c, key, time.Hour*24*32)
+	}
 }
 
 func (r RedisUser) AddUser(name string, day int) UserInfo {
@@ -162,7 +186,7 @@ func (r RedisUser) List() []string {
 		return nil
 	}
 	var list []string
-	for k, _ := range all.Val() {
+	for k := range all.Val() {
 		list = append(list, k)
 	}
 	return list
@@ -183,6 +207,22 @@ func (r RedisUser) AddExpireTime(name string, day int) {
 	}
 	user.Expire.Add(time.Hour * 24 * time.Duration(day))
 	r.r.HSet(r.c, formatKey(__info__, user.Token), user.Expire.Format(time.DateOnly))
+}
+
+func (r RedisUser) Traffic(token string) Traffic {
+	month := time.Now().Month()
+	key := formatKey(__traffic__, token, strconv.FormatInt(int64(month), 10))
+	all := r.r.HGetAll(r.c, key)
+	if all.Err() != nil {
+		panic(all.Err())
+	}
+	val := all.Val()
+	upload, _ := strconv.ParseInt(val["upload"], 10, 64)
+	download, _ := strconv.ParseInt(val["download"], 10, 64)
+	return Traffic{
+		Upload:   upload,
+		Download: download,
+	}
 }
 
 func formatKey(s ...string) string {
