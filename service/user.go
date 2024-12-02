@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"ws-server/statics"
 )
 
 const (
@@ -18,16 +19,6 @@ const (
 	__info__ = "clash:redis:user:info"
 
 	__traffic__ = "clash:redis:user:traffic"
-)
-
-const (
-	Byte uint64 = 1.0
-	KB          = 1024 * Byte
-	MB          = 1024 * KB
-	GB          = 1024 * MB
-	TB          = 1024 * GB
-	PB          = 1024 * TB
-	EB          = 1024 * PB
 )
 
 type UserInfo struct {
@@ -132,7 +123,7 @@ func (r RedisUser) AddUser(name string, day int) UserInfo {
 		Password: u.String(),
 		Token:    u.String(),
 		Expire:   time.Now().AddDate(0, 0, day),
-		Total:    50 * GB,
+		Total:    uint64(50 * statics.GB),
 	}
 
 	if day < 0 {
@@ -197,7 +188,7 @@ func (r RedisUser) AddTotalTraffic(name string, size int) {
 	if user == nil {
 		panic("用户不存在")
 	}
-	r.r.HIncrBy(r.c, formatKey(__info__, user.Token), "total", int64(size)*int64(GB))
+	r.r.HIncrBy(r.c, formatKey(__info__, user.Token), "total", int64(size)*int64(statics.GB))
 }
 
 func (r RedisUser) AddExpireTime(name string, day int) {

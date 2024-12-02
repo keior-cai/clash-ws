@@ -1,0 +1,4 @@
+redis:
+  addr: 127.0.0.1:4370
+  db: 0
+path: ./main/service/deploy/config/

@@ -5,8 +5,9 @@ import (
 	"github.com/go-chi/chi"
 	"net/http"
 	"strconv"
-	"ws-server/config"
+	"ws-server/main/service/config"
 	"ws-server/service"
+	"ws-server/statics"
 )
 
 type UserHub struct {
@@ -20,6 +21,12 @@ type AddExpireTime struct {
 
 type AddTraffic struct {
 	Size int `json:"size"`
+}
+
+type Traffic struct {
+	Upload   string `json:"upload"`
+	Download string `json:"download"`
+	Total    string `json:"total"`
 }
 
 func NewUserHub(c config.HttpServer, s service.UserService) UserHub {
@@ -95,6 +102,19 @@ func (uh UserHub) Route(route chi.Router) {
 		_ = json.NewDecoder(r.Body).Decode(traffic)
 		uh.s.AddTotalTraffic(name, traffic.Size)
 		_, _ = w.Write([]byte("ok"))
+	})
+
+	route.Get("/{name}/traffic", func(w http.ResponseWriter, r *http.Request) {
+		name := chi.URLParam(r, "name")
+		user := uh.s.GetByName(name)
+		traffic := uh.s.Traffic(user.Token)
+
+		t := Traffic{
+			Upload:   statics.TrafficUnit(traffic.Upload).String(),
+			Download: statics.TrafficUnit(traffic.Download).String(),
+			Total:    statics.TrafficUnit(user.Total).String(),
+		}
+		_ = json.NewEncoder(w).Encode(t)
 	})
 
 	route.Get("/", func(w http.ResponseWriter, rt *http.Request) {

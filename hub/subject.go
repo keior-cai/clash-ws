@@ -5,7 +5,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"net/http"
 	"strings"
-	"ws-server/config"
+	"ws-server/main/service/config"
 	"ws-server/service"
 	subject2 "ws-server/subject"
 )
